@@ -2285,6 +2285,7 @@ static gboolean priv_map_reply_to_discovery_request (NiceAgent *agent, StunMessa
               d->stream->id,
               d->component->id,
               &niceaddr,
+              NICE_CANDIDATE_TRANSPORT_UDP,
               d->nicesock);
 
           d->stun_message.buffer = NULL;
@@ -2423,6 +2424,7 @@ static gboolean priv_map_reply_to_relay_request (NiceAgent *agent, StunMessage *
                 d->stream->id,
                 d->component->id,
                 &niceaddr,
+                NICE_CANDIDATE_TRANSPORT_UDP,
                 d->nicesock);
           }
 
@@ -2432,6 +2434,7 @@ static gboolean priv_map_reply_to_relay_request (NiceAgent *agent, StunMessage *
              d->stream->id,
              d->component->id,
              &niceaddr,
+             NICE_CANDIDATE_TRANSPORT_UDP,
              d->nicesock,
              d->turn);
 
