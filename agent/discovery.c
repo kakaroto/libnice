@@ -530,6 +530,10 @@ discovery_add_server_reflexive_candidate (
     return NULL;
 
   candidate = nice_candidate_new (NICE_CANDIDATE_TYPE_SERVER_REFLEXIVE);
+  candidate->transport = transport;
+  candidate->stream_id = stream_id;
+  candidate->component_id = component_id;
+  candidate->addr = *address;
 
   if (agent->compatibility == NICE_COMPATIBILITY_GOOGLE) {
     candidate->priority = nice_candidate_jingle_priority (candidate);
@@ -537,14 +541,8 @@ discovery_add_server_reflexive_candidate (
              agent->compatibility == NICE_COMPATIBILITY_OC2007)  {
     candidate->priority = nice_candidate_msn_priority (candidate);
   } else {
-    candidate->priority =  nice_candidate_ice_priority_full
-        (NICE_CANDIDATE_TYPE_PREF_SERVER_REFLEXIVE, 0, component_id);
+    candidate->priority =  nice_candidate_ice_priority (candidate);
   }
-
-  candidate->transport = transport;
-  candidate->stream_id = stream_id;
-  candidate->component_id = component_id;
-  candidate->addr = *address;
 
   /* step: link to the base candidate+socket */
   candidate->sockptr = base_socket;
@@ -591,6 +589,11 @@ discovery_add_relay_candidate (
     return NULL;
 
   candidate = nice_candidate_new (NICE_CANDIDATE_TYPE_RELAYED);
+  candidate->transport = transport;
+  candidate->stream_id = stream_id;
+  candidate->component_id = component_id;
+  candidate->addr = *address;
+  candidate->turn = turn;
 
   if (agent->compatibility == NICE_COMPATIBILITY_GOOGLE) {
     candidate->priority = nice_candidate_jingle_priority (candidate);
@@ -598,15 +601,8 @@ discovery_add_relay_candidate (
              agent->compatibility == NICE_COMPATIBILITY_OC2007)  {
     candidate->priority = nice_candidate_msn_priority (candidate);
   } else {
-    candidate->priority =  nice_candidate_ice_priority_full
-        (NICE_CANDIDATE_TYPE_PREF_RELAYED, 0, component_id);
+    candidate->priority =  nice_candidate_ice_priority (candidate);
   }
-  candidate->transport = transport;
-  candidate->stream_id = stream_id;
-  candidate->component_id = component_id;
-  candidate->addr = *address;
-  candidate->turn = turn;
-
   /* step: link to the base candidate+socket */
   relay_socket = nice_turn_socket_new (agent->main_context, address,
       base_socket, &turn->server,
@@ -668,6 +664,11 @@ discovery_add_peer_reflexive_candidate (
     return NULL;
 
   candidate = nice_candidate_new (NICE_CANDIDATE_TYPE_PEER_REFLEXIVE);
+  candidate->transport = local->transport;
+  candidate->stream_id = stream_id;
+  candidate->component_id = component_id;
+  candidate->addr = *address;
+  candidate->base_addr = base_socket->addr;
 
   if (agent->compatibility == NICE_COMPATIBILITY_GOOGLE) {
     candidate->priority = nice_candidate_jingle_priority (candidate);
@@ -675,15 +676,8 @@ discovery_add_peer_reflexive_candidate (
              agent->compatibility == NICE_COMPATIBILITY_OC2007)  {
     candidate->priority = nice_candidate_msn_priority (candidate);
   } else {
-    candidate->priority = nice_candidate_ice_priority_full
-        (NICE_CANDIDATE_TYPE_PREF_PEER_REFLEXIVE, 0, component_id);
+    candidate->priority = nice_candidate_ice_priority (candidate);
   }
-  candidate->transport = local->transport;
-  candidate->stream_id = stream_id;
-  candidate->component_id = component_id;
-  candidate->addr = *address;
-  candidate->base_addr = base_socket->addr;
-
 
   priv_assign_foundation (agent, candidate);
 
@@ -761,6 +755,9 @@ NiceCandidate *discovery_learn_remote_peer_reflexive_candidate (
 
   candidate->addr = *remote_address;
   candidate->base_addr = *remote_address;
+  candidate->transport = remote->transport;
+  candidate->stream_id = stream->id;
+  candidate->component_id = component->id;
 
   /* if the check didn't contain the PRIORITY attribute, then the priority will
    * be 0, which is invalid... */
@@ -772,13 +769,8 @@ NiceCandidate *discovery_learn_remote_peer_reflexive_candidate (
              agent->compatibility == NICE_COMPATIBILITY_OC2007)  {
     candidate->priority = nice_candidate_msn_priority (candidate);
   } else {
-    candidate->priority = nice_candidate_ice_priority_full
-        (NICE_CANDIDATE_TYPE_PREF_PEER_REFLEXIVE, 0, component->id);
+    candidate->priority = nice_candidate_ice_priority (candidate);
   }
-  candidate->transport = remote->transport;
-  candidate->stream_id = stream->id;
-  candidate->component_id = component->id;
-
 
   priv_assign_remote_foundation (agent, candidate);
 
