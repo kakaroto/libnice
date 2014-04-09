@@ -470,6 +470,9 @@ NiceCandidate *discovery_add_local_host_candidate (
   } else if (agent->compatibility == NICE_COMPATIBILITY_MSN ||
              agent->compatibility == NICE_COMPATIBILITY_OC2007)  {
     candidate->priority = nice_candidate_msn_priority (candidate);
+  } else if (agent->compatibility == NICE_COMPATIBILITY_OC2007R2) {
+    candidate->priority =  nice_candidate_ms_ice_priority (candidate,
+        agent->reliable, FALSE);
   } else {
     candidate->priority = nice_candidate_ice_priority (candidate,
         agent->reliable, FALSE);
@@ -542,6 +545,9 @@ discovery_add_server_reflexive_candidate (
   } else if (agent->compatibility == NICE_COMPATIBILITY_MSN ||
              agent->compatibility == NICE_COMPATIBILITY_OC2007)  {
     candidate->priority = nice_candidate_msn_priority (candidate);
+  } else if (agent->compatibility == NICE_COMPATIBILITY_OC2007R2) {
+    candidate->priority =  nice_candidate_ms_ice_priority (candidate,
+        agent->reliable, nat_assisted);
   } else {
     candidate->priority =  nice_candidate_ice_priority (candidate,
         agent->reliable, nat_assisted);
@@ -603,6 +609,9 @@ discovery_add_relay_candidate (
   } else if (agent->compatibility == NICE_COMPATIBILITY_MSN ||
              agent->compatibility == NICE_COMPATIBILITY_OC2007)  {
     candidate->priority = nice_candidate_msn_priority (candidate);
+  } else if (agent->compatibility == NICE_COMPATIBILITY_OC2007R2) {
+    candidate->priority =  nice_candidate_ms_ice_priority (candidate,
+        agent->reliable, FALSE);
   } else {
     candidate->priority =  nice_candidate_ice_priority (candidate,
         agent->reliable, FALSE);
@@ -679,6 +688,9 @@ discovery_add_peer_reflexive_candidate (
   } else if (agent->compatibility == NICE_COMPATIBILITY_MSN ||
              agent->compatibility == NICE_COMPATIBILITY_OC2007)  {
     candidate->priority = nice_candidate_msn_priority (candidate);
+  } else if (agent->compatibility == NICE_COMPATIBILITY_OC2007R2) {
+    candidate->priority =  nice_candidate_ms_ice_priority (candidate,
+        agent->reliable, FALSE);
   } else {
     candidate->priority = nice_candidate_ice_priority (candidate,
         agent->reliable, FALSE);
@@ -780,6 +792,9 @@ NiceCandidate *discovery_learn_remote_peer_reflexive_candidate (
   } else if (agent->compatibility == NICE_COMPATIBILITY_MSN ||
              agent->compatibility == NICE_COMPATIBILITY_OC2007)  {
     candidate->priority = nice_candidate_msn_priority (candidate);
+  } else if (agent->compatibility == NICE_COMPATIBILITY_OC2007R2) {
+    candidate->priority =  nice_candidate_ms_ice_priority (candidate,
+        agent->reliable, FALSE);
   } else {
     candidate->priority = nice_candidate_ice_priority (candidate,
         agent->reliable, FALSE);
