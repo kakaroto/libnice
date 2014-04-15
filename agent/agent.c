@@ -2558,8 +2558,9 @@ static gboolean priv_add_remote_candidate (
       gchar tmpbuf[INET6_ADDRSTRLEN] = {0};
       if (addr)
         nice_address_to_string (addr, tmpbuf);
-      nice_debug ("Agent %p : Adding remote candidate with addr [%s]:%u"
-          " for s%d/c%d. U/P '%s'/'%s' prio: %u", agent, tmpbuf,
+      nice_debug ("Agent %p : Adding %s remote candidate with addr [%s]:%u"
+          " for s%d/c%d. U/P '%s'/'%s' prio: %u", agent,
+          _transport_to_string (transport), tmpbuf,
           addr? nice_address_get_port (addr) : 0, stream_id, component_id,
           username, password, priority);
     }
@@ -3763,7 +3764,7 @@ nice_agent_send_messages_nonblocking_internal (
                   ((guint8 *) message->buffers[j].buffer) + offset_in_buffer;
               local_bufs[local_message.n_buffers].size =
                   MIN (message->buffers[j].size, packet_len);
-              packet_len -= local_bufs[local_message.n_buffers++].size;
+              packet_len -= local_bufs[local_message.n_buffers].size;
               offset += local_bufs[local_message.n_buffers++].size;
               offset_in_buffer = 0;
             }
@@ -5143,7 +5144,12 @@ agent_socket_send (NiceSocket *sock, const NiceAddress *addr, gsize len,
     const gchar *buf)
 {
   if (nice_socket_is_reliable (sock)) {
-    return nice_socket_send_reliable (sock, addr, len, buf);
+    guint16 rfc4571_frame = htons (len);
+    GOutputVector local_buf[2] = {{&rfc4571_frame, 2}, { buf, len }};
+    NiceOutputMessage local_message = { local_buf, 2};
+
+    /* ICE-TCP requires that all packets be framed with RFC4571 */
+    return nice_socket_send_messages_reliable (sock, addr, &local_message, 1);
   } else {
     gssize ret = nice_socket_send_reliable (sock, addr, len, buf);
     if (ret < 0)
