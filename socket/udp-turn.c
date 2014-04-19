@@ -528,6 +528,30 @@ priv_clear_permissions (UdpTurnPriv *priv)
   priv->permissions = NULL;
 }
 
+static gint
+_socket_send_messages_wrapped (NiceSocket *sock, const NiceAddress *to,
+    const NiceOutputMessage *messages, guint n_messages, gboolean reliable)
+{
+  if (reliable)
+    return nice_socket_send_messages_reliable (sock, to, messages, n_messages);
+  else
+    return nice_socket_send_messages (sock, to, messages, n_messages);
+}
+
+static gssize
+_socket_send_wrapped (NiceSocket *sock, const NiceAddress *to,
+    guint len, const gchar *buf, gboolean reliable)
+{
+  GOutputVector local_buf = { buf, len };
+  NiceOutputMessage local_message = { &local_buf, 1};
+  gint ret;
+
+  ret = _socket_send_messages_wrapped (sock, to, &local_message, 1, reliable);
+  if (ret == 1)
+    return len;
+  return ret;
+}
+
 static void
 socket_enqueue_data(UdpTurnPriv *priv, const NiceAddress *to,
     guint len, const gchar *buf, gboolean reliable)
@@ -558,12 +582,8 @@ socket_dequeue_all_data (UdpTurnPriv *priv, const NiceAddress *to)
           (SendData *) g_queue_pop_head(send_queue);
 
       nice_debug ("dequeuing data");
-      if (data->reliable)
-        nice_socket_send_reliable (priv->base_socket, &priv->server_addr,
-            data->data_len, data->data);
-      else
-        nice_socket_send (priv->base_socket, &priv->server_addr, data->data_len,
-            data->data);
+      _socket_send_wrapped (priv->base_socket, &priv->server_addr,
+          data->data_len, data->data, data->reliable);
 
       g_free (data->data);
       g_slice_free (SendData, data);
@@ -638,12 +658,8 @@ socket_send_message (NiceSocket *sock, const NiceAddress *to,
         goto error;
       }
     } else {
-      if (reliable)
-        ret = nice_socket_send_messages_reliable (priv->base_socket,
-            &priv->server_addr, message, 1);
-      else
-        ret = nice_socket_send_messages (priv->base_socket, &priv->server_addr,
-            message, 1);
+      ret = _socket_send_messages_wrapped (priv->base_socket,
+          &priv->server_addr, message, 1, reliable);
 
       if (ret == 1)
         return output_message_get_size (message);
@@ -741,12 +757,8 @@ socket_send_message (NiceSocket *sock, const NiceAddress *to,
       GOutputVector local_buf = { buffer, msg_len };
       NiceOutputMessage local_message = {&local_buf, 1};
 
-      if (reliable)
-        ret = nice_socket_send_messages_reliable (priv->base_socket,
-            &priv->server_addr, &local_message, 1);
-      else
-        ret = nice_socket_send_messages (priv->base_socket, &priv->server_addr,
-            &local_message, 1);
+      ret = _socket_send_messages_wrapped (priv->base_socket,
+          &priv->server_addr, &local_message, 1, reliable);
 
       if (ret == 1)
         return msg_len;
@@ -755,10 +767,8 @@ socket_send_message (NiceSocket *sock, const NiceAddress *to,
   }
 
   /* Error condition pass through to the base socket. */
-  if (reliable)
-    ret = nice_socket_send_messages_reliable (priv->base_socket, to, message, 1);
-  else
-    ret = nice_socket_send_messages (priv->base_socket, to, message, 1);
+  ret = _socket_send_messages_wrapped (priv->base_socket, to, message, 1,
+      reliable);
   if (ret == 1)
     return output_message_get_size (message);
   return ret;
@@ -1458,9 +1468,9 @@ priv_retransmissions_tick_unlocked (UdpTurnPriv *priv)
         }
       case STUN_USAGE_TIMER_RETURN_RETRANSMIT:
         /* Retransmit */
-        nice_socket_send (priv->base_socket, &priv->server_addr,
+        _socket_send_wrapped (priv->base_socket, &priv->server_addr,
             stun_message_length (&priv->current_binding_msg->message),
-            (gchar *)priv->current_binding_msg->buffer);
+            (gchar *)priv->current_binding_msg->buffer, FALSE);
         ret = TRUE;
         break;
       case STUN_USAGE_TIMER_RETURN_SUCCESS:
@@ -1523,9 +1533,9 @@ priv_retransmissions_create_permission_tick_unlocked (UdpTurnPriv *priv, GList *
         }
       case STUN_USAGE_TIMER_RETURN_RETRANSMIT:
         /* Retransmit */
-        nice_socket_send (priv->base_socket, &priv->server_addr,
+        _socket_send_wrapped (priv->base_socket, &priv->server_addr,
             stun_message_length (&current_create_permission_msg->message),
-            (gchar *)current_create_permission_msg->buffer);
+            (gchar *)current_create_permission_msg->buffer, FALSE);
         ret = TRUE;
         break;
       case STUN_USAGE_TIMER_RETURN_SUCCESS:
@@ -1655,15 +1665,15 @@ priv_send_turn_message (UdpTurnPriv *priv, TURNMessage *msg)
   }
 
   if (nice_socket_is_reliable (priv->base_socket)) {
-    nice_socket_send_reliable (priv->base_socket, &priv->server_addr,
-        stun_len, (gchar *)msg->buffer);
+    _socket_send_wrapped (priv->base_socket, &priv->server_addr,
+        stun_len, (gchar *)msg->buffer, TRUE);
     stun_timer_start_reliable (&msg->timer,
         STUN_TIMER_DEFAULT_RELIABLE_TIMEOUT);
   } else {
-    if (nice_socket_send_reliable (priv->base_socket, &priv->server_addr,
-            stun_len, (gchar *)msg->buffer) < 0)
-      nice_socket_send (priv->base_socket, &priv->server_addr,
-          stun_len, (gchar *)msg->buffer);
+    if (_socket_send_wrapped (priv->base_socket, &priv->server_addr,
+            stun_len, (gchar *)msg->buffer, TRUE) < 0)
+      _socket_send_wrapped (priv->base_socket, &priv->server_addr,
+          stun_len, (gchar *)msg->buffer, FALSE);
     stun_timer_start (&msg->timer, STUN_TIMER_DEFAULT_TIMEOUT,
         STUN_TIMER_DEFAULT_MAX_RETRANSMISSIONS);
   }
@@ -1717,14 +1727,14 @@ priv_send_create_permission(UdpTurnPriv *priv, StunMessage *resp,
 
   if (msg_buf_len > 0) {
     if (nice_socket_is_reliable (priv->base_socket)) {
-      res = nice_socket_send_reliable (priv->base_socket, &priv->server_addr,
-          msg_buf_len, (gchar *) msg->buffer);
+      res = _socket_send_wrapped (priv->base_socket, &priv->server_addr,
+          msg_buf_len, (gchar *) msg->buffer, TRUE);
     } else {
-      res = nice_socket_send_reliable (priv->base_socket, &priv->server_addr,
-          msg_buf_len, (gchar *) msg->buffer);
+      res = _socket_send_wrapped (priv->base_socket, &priv->server_addr,
+          msg_buf_len, (gchar *) msg->buffer, TRUE);
       if (res < 0)
-        res = nice_socket_send (priv->base_socket, &priv->server_addr,
-            msg_buf_len, (gchar *) msg->buffer);
+        res = _socket_send_wrapped (priv->base_socket, &priv->server_addr,
+            msg_buf_len, (gchar *) msg->buffer, FALSE);
     }
 
     if (nice_socket_is_reliable (priv->base_socket)) {
