@@ -3088,6 +3088,7 @@ agent_recv_message_unlocked (
         break;
       }
     }
+    break;
   }
 
   if (retval == RECV_OOB)
