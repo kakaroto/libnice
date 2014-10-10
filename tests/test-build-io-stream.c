@@ -441,7 +441,6 @@ main (void)
 #endif
   nice_address_init (&addr);
   g_type_init ();
-  g_thread_init (NULL);
 
   g_assert (nice_address_set_from_string (&addr, "127.0.0.1"));
 

@@ -73,7 +73,6 @@ main (void)
 
   nice_address_init (&addr);
   g_type_init ();
-  g_thread_init(NULL);
 
   loop = g_main_loop_new (NULL, FALSE);
 

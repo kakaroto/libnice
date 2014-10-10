@@ -1203,7 +1203,6 @@ main (int argc, char *argv[])
   WSAStartup (0x0202, &w);
 #endif
   g_type_init ();
-  g_thread_init (NULL);
 
   if (!long_mode) {
     /* Quick mode. Just test each of the stream APIs in reliable and

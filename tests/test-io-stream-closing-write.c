@@ -128,7 +128,6 @@ int main (void)
   WSAStartup (0x0202, &w);
 #endif
   g_type_init ();
-  g_thread_init (NULL);
 
   run_io_stream_test (30, TRUE, &callbacks, (gpointer) TRUE, NULL, NULL, NULL);
 
