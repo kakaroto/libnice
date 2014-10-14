@@ -1178,11 +1178,11 @@ static gboolean priv_discovery_tick (gpointer pointer)
   NiceAgent *agent = pointer;
   gboolean ret;
 
-  agent_lock();
+  agent_lock(agent);
   if (g_source_is_destroyed (g_main_current_source ())) {
     nice_debug ("Source was destroyed. "
         "Avoided race condition in priv_discovery_tick");
-    agent_unlock ();
+    agent_unlock (agent);
     return FALSE;
   }
 

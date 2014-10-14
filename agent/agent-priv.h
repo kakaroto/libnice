@@ -163,6 +163,8 @@ struct _NiceAgent
   guint16 rfc4571_expecting_length;
   gboolean use_ice_udp;
   gboolean use_ice_tcp;
+  /* Mutex used for thread-safe lib */
+  GMutex mutex;
   /* XXX: add pointer to internal data struct for ABI-safe extensions */
 };
 
@@ -179,8 +181,8 @@ Stream *agent_find_stream (NiceAgent *agent, guint stream_id);
 void agent_gathering_done (NiceAgent *agent);
 void agent_signal_gathering_done (NiceAgent *agent);
 
-void agent_lock (void);
-void agent_unlock (void);
+void agent_lock (NiceAgent *agent); // Can be NULL
+void agent_unlock (NiceAgent *agent);
 void agent_unlock_and_emit (NiceAgent *agent);
 
 void agent_signal_new_selected_pair (

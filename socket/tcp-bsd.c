@@ -419,12 +419,12 @@ socket_send_more (
   NiceSocket *sock = (NiceSocket *) data;
   TcpPriv *priv = sock->priv;
 
-  agent_lock ();
+  agent_lock (NULL);
 
   if (g_source_is_destroyed (g_main_current_source ())) {
     nice_debug ("Source was destroyed. "
         "Avoided race condition in tcp-bsd.c:socket_send_more");
-    agent_unlock ();
+    agent_unlock (NULL);
     return FALSE;
   }
 
@@ -436,7 +436,7 @@ socket_send_more (
     g_source_unref (priv->io_source);
     priv->io_source = NULL;
 
-    agent_unlock ();
+    agent_unlock (NULL);
 
     if (priv->writable_cb)
       priv->writable_cb (sock, priv->writable_data);
@@ -444,6 +444,6 @@ socket_send_more (
     return FALSE;
   }
 
-  agent_unlock ();
+  agent_unlock (NULL);
   return TRUE;
 }

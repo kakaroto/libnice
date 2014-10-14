@@ -152,14 +152,20 @@ static void nice_agent_get_property (GObject *object,
 static void nice_agent_set_property (GObject *object,
   guint property_id, const GValue *value, GParamSpec *pspec);
 
-void agent_lock (void)
+void agent_lock (NiceAgent *agent)
 {
-  g_mutex_lock (&agent_mutex);
+  if (agent)
+    g_mutex_lock (&agent->mutex);
+  else
+    g_mutex_lock (&agent_mutex);
 }
 
-void agent_unlock (void)
+void agent_unlock (NiceAgent *agent)
 {
-  g_mutex_unlock (&agent_mutex);
+  if (agent)
+    g_mutex_unlock (&agent->mutex);
+  else
+    g_mutex_unlock (&agent_mutex);
 }
 
 
@@ -202,7 +208,7 @@ agent_unlock_and_emit (NiceAgent *agent)
   queue = agent->pending_signals;
   g_queue_init (&agent->pending_signals);
 
-  agent_unlock ();
+  agent_unlock (agent);
 
   while ((sig = g_queue_pop_head (&queue))) {
     g_signal_emitv (sig->params, sig->signal_id, 0, NULL);
@@ -1020,6 +1026,7 @@ nice_agent_init (NiceAgent *agent)
   priv_generate_tie_breaker (agent);
 
   g_queue_init (&agent->pending_signals);
+  g_mutex_init (&agent->mutex);
 }
 
 
@@ -1058,7 +1065,7 @@ nice_agent_get_property (
 {
   NiceAgent *agent = NICE_AGENT (object);
 
-  agent_lock();
+  agent_lock(agent);
 
   switch (property_id)
     {
@@ -1238,7 +1245,7 @@ nice_agent_set_property (
 {
   NiceAgent *agent = NICE_AGENT (object);
 
-  agent_lock();
+  agent_lock(agent);
 
   switch (property_id)
     {
@@ -1752,18 +1759,15 @@ static gboolean
 notify_pseudo_tcp_socket_clock (gpointer user_data)
 {
   Component *component = user_data;
-  Stream *stream;
-  NiceAgent *agent;
+  Stream *stream = component->stream;
+  NiceAgent *agent = component->agent;
 
-  agent_lock();
-
-  stream = component->stream;
-  agent = component->agent;
+  agent_lock(agent);
 
   if (g_source_is_destroyed (g_main_current_source ())) {
     nice_debug ("Source was destroyed. "
         "Avoided race condition in notify_pseudo_tcp_socket_clock");
-    agent_unlock ();
+    agent_unlock (agent);
     return FALSE;
   }
 
@@ -1820,13 +1824,13 @@ _tcp_sock_is_writable (NiceSocket *sock, gpointer user_data)
   NiceAgent *agent = component->agent;
   Stream *stream = component->stream;
 
-  agent_lock ();
+  agent_lock (agent);
 
   /* Don't signal writable if the socket that has become writable is not
    * the selected pair */
   if (component->selected_pair.local == NULL ||
       component->selected_pair.local->sockptr != sock) {
-    agent_unlock ();
+    agent_unlock (agent);
     return;
   }
 
@@ -2333,7 +2337,7 @@ nice_agent_add_stream (
   guint ret = 0;
   guint i;
 
-  agent_lock();
+  agent_lock(agent);
   stream = stream_new (n_components, agent);
 
   agent->streams = g_slist_append (agent->streams, stream);
@@ -2379,7 +2383,7 @@ nice_agent_set_relay_info(NiceAgent *agent,
   g_return_val_if_fail (password, FALSE);
   g_return_val_if_fail (type <= NICE_RELAY_TYPE_TURN_TLS, FALSE);
 
-  agent_lock();
+  agent_lock(agent);
 
   if (!agent_find_component (agent, stream_id, component_id, &stream,
           &component)) {
@@ -2434,11 +2438,11 @@ static gboolean priv_upnp_timeout_cb (gpointer user_data)
 {
   NiceAgent *agent = (NiceAgent*)user_data;
 
-  agent_lock();
+  agent_lock(agent);
 
   /* If the source has been destroyed, we have already freed all mappings. */
   if (g_source_is_destroyed (g_main_current_source ())) {
-    agent_unlock ();
+    agent_unlock (agent);
     return FALSE;
   }
 
@@ -2486,7 +2490,7 @@ static void _upnp_mapped_external_port (GUPnPSimpleIgd *self, gchar *proto,
   NiceCandidateTransport transport;
   GSList *i, *j, *k;
 
-  agent_lock();
+  agent_lock(agent);
 
   if (agent->upnp_timer_source == NULL)
     goto end;
@@ -2552,7 +2556,7 @@ static void _upnp_error_mapping_port (GUPnPSimpleIgd *self, GError *error,
   NiceAddress localaddr;
   GSList *i;
 
-  agent_lock();
+  agent_lock(agent);
 
   nice_debug ("Agent %p : Error mapping %s:%d to %d (%d) : %s", agent, local_ip,
       local_port, external_port, error->domain, error->message);
@@ -2587,7 +2591,7 @@ nice_agent_gather_candidates (
   GSList *local_addresses = NULL;
   gboolean ret = TRUE;
 
-  agent_lock();
+  agent_lock(agent);
 
   stream = agent_find_stream (agent, stream_id);
   if (stream == NULL) {
@@ -2907,7 +2911,7 @@ nice_agent_remove_stream (
 
   Stream *stream;
 
-  agent_lock();
+  agent_lock(agent);
   stream = agent_find_stream (agent, stream_id);
 
   if (!stream) {
@@ -2947,7 +2951,7 @@ nice_agent_set_port_range (NiceAgent *agent, guint stream_id, guint component_id
   Stream *stream;
   Component *component;
 
-  agent_lock();
+  agent_lock(agent);
 
   if (agent_find_component (agent, stream_id, component_id, &stream,
           &component)) {
@@ -2967,7 +2971,7 @@ nice_agent_add_local_address (NiceAgent *agent, NiceAddress *addr)
 {
   NiceAddress *dupaddr;
 
-  agent_lock();
+  agent_lock(agent);
 
   dupaddr = nice_address_dup (addr);
   nice_address_set_port (dupaddr, 0);
@@ -3096,7 +3100,7 @@ nice_agent_set_remote_credentials (
   Stream *stream;
   gboolean ret = FALSE;
 
-  agent_lock();
+  agent_lock(agent);
 
   stream = agent_find_stream (agent, stream_id);
   /* note: oddly enough, ufrag and pwd can be empty strings */
@@ -3124,7 +3128,7 @@ nice_agent_get_local_credentials (
   Stream *stream;
   gboolean ret = TRUE;
 
-  agent_lock();
+  agent_lock(agent);
 
   stream = agent_find_stream (agent, stream_id);
   if (stream == NULL) {
@@ -3194,7 +3198,7 @@ nice_agent_set_remote_candidates (NiceAgent *agent, guint stream_id, guint compo
 
   nice_debug ("Agent %p: set_remote_candidates %d %d", agent, stream_id, component_id);
 
-  agent_lock();
+  agent_lock(agent);
 
   if (!agent_find_component (agent, stream_id, component_id,
           &stream, &component)) {
@@ -3949,7 +3953,7 @@ nice_agent_recv_messages_blocking_or_nonblocking (NiceAgent *agent,
     }
   }
 
-  agent_lock ();
+  agent_lock (agent);
 
   if (!agent_find_component (agent, stream_id, component_id,
           &stream, &component)) {
@@ -4044,7 +4048,7 @@ nice_agent_recv_messages_blocking_or_nonblocking (NiceAgent *agent,
 
     agent_unlock_and_emit (agent);
     g_main_context_iteration (context, blocking);
-    agent_lock ();
+    agent_lock (agent);
 
     if (!agent_find_component (agent, stream_id, component_id,
             &stream, &component)) {
@@ -4222,7 +4226,7 @@ nice_agent_send_messages_nonblocking_internal (
 
   g_assert (n_messages == 1 || !allow_partial);
 
-  agent_lock ();
+  agent_lock (agent);
 
   if (!agent_find_component (agent, stream_id, component_id,
           &stream, &component)) {
@@ -4465,7 +4469,7 @@ nice_agent_get_local_candidates (
   GSList * ret = NULL;
   GSList * item = NULL;
 
-  agent_lock();
+  agent_lock(agent);
 
   if (!agent_find_component (agent, stream_id, component_id, NULL, &component)) {
     goto done;
@@ -4489,7 +4493,7 @@ nice_agent_get_remote_candidates (
   Component *component;
   GSList *ret = NULL, *item = NULL;
 
-  agent_lock();
+  agent_lock(agent);
   if (!agent_find_component (agent, stream_id, component_id, NULL, &component))
     {
       goto done;
@@ -4509,7 +4513,7 @@ nice_agent_restart (
 {
   GSList *i;
 
-  agent_lock();
+  agent_lock(agent);
 
   /* step: regenerate tie-breaker value */
   priv_generate_tie_breaker (agent);
@@ -4534,7 +4538,7 @@ nice_agent_restart_stream (
   gboolean res = FALSE;
   Stream *stream;
 
-  agent_lock();
+  agent_lock(agent);
 
   stream = agent_find_stream (agent, stream_id);
   if (!stream) {
@@ -4625,6 +4629,8 @@ nice_agent_dispose (GObject *object)
     g_main_context_unref (agent->main_context);
   agent->main_context = NULL;
 
+  g_mutex_clear (&agent->mutex);
+
   if (G_OBJECT_CLASS (nice_agent_parent_class)->dispose)
     G_OBJECT_CLASS (nice_agent_parent_class)->dispose (object);
 
@@ -4634,25 +4640,21 @@ gboolean
 component_io_cb (GSocket *gsocket, GIOCondition condition, gpointer user_data)
 {
   SocketSource *socket_source = user_data;
-  Component *component;
-  NiceAgent *agent;
-  Stream *stream;
+  Component *component = socket_source->component;
+  NiceAgent *agent = component->agent;
+  Stream *stream = component->stream;
   gboolean has_io_callback;
   gboolean remove_source = FALSE;
 
-  agent_lock ();
+  agent_lock (agent);
 
   if (g_source_is_destroyed (g_main_current_source ())) {
     /* Silently return FALSE. */
     nice_debug ("%s: source %p destroyed", G_STRFUNC, g_main_current_source ());
 
-    agent_unlock ();
+    agent_unlock (agent);
     return G_SOURCE_REMOVE;
   }
-
-  component = socket_source->component;
-  agent = component->agent;
-  stream = component->stream;
 
   g_object_ref (agent);
 
@@ -4670,7 +4672,7 @@ component_io_cb (GSocket *gsocket, GIOCondition condition, gpointer user_data)
     }
 
     component_detach_socket (component, socket_source->socket);
-    agent_unlock ();
+    agent_unlock (agent);
     return G_SOURCE_REMOVE;
   }
 
@@ -4832,7 +4834,7 @@ done:
   if (component->n_recv_messages == 0 && component->recv_messages == NULL) {
     agent_unlock_and_emit (agent);
   } else {
-    agent_unlock ();
+    agent_unlock (agent);
   }
 
   g_object_unref (agent);
@@ -4858,7 +4860,7 @@ nice_agent_attach_recv (
   Stream *stream = NULL;
   gboolean ret = FALSE;
 
-  agent_lock();
+  agent_lock(agent);
 
   /* attach candidates */
 
@@ -4907,7 +4909,7 @@ nice_agent_set_selected_pair (
   CandidatePair pair;
   gboolean ret = FALSE;
 
-  agent_lock();
+  agent_lock(agent);
 
   /* step: check that params specify an existing pair */
   if (!agent_find_component (agent, stream_id, component_id, &stream, &component)) {
@@ -4952,7 +4954,7 @@ nice_agent_get_selected_pair (NiceAgent *agent, guint stream_id,
   Stream *stream;
   gboolean ret = FALSE;
 
-  agent_lock();
+  agent_lock(agent);
 
   /* step: check that params specify an existing pair */
   if (!agent_find_component (agent, stream_id, component_id,
@@ -4980,7 +4982,7 @@ nice_agent_get_selected_socket (NiceAgent *agent, guint stream_id,
   NiceSocket *nice_socket;
   GSocket *g_socket = NULL;
 
-  agent_lock();
+  agent_lock(agent);
 
   /* Reliable streams are pseudotcp or MUST use RFC 4571 framing */
   if (agent->reliable)
@@ -5063,12 +5065,7 @@ nice_agent_set_selected_remote_candidate (
   g_return_val_if_fail (component_id != 0, FALSE);
   g_return_val_if_fail (candidate != NULL, FALSE);
 
-  g_return_val_if_fail (NICE_IS_AGENT (agent), FALSE);
-  g_return_val_if_fail (stream_id != 0, FALSE);
-  g_return_val_if_fail (component_id != 0, FALSE);
-  g_return_val_if_fail (candidate != NULL, FALSE);
-
-  agent_lock();
+  agent_lock(agent);
 
   /* step: check if the component exists*/
   if (!agent_find_component (agent, stream_id, component_id, &stream, &component)) {
@@ -5143,7 +5140,7 @@ nice_agent_set_stream_tos (NiceAgent *agent,
   GSList *i, *j;
   Stream *stream;
 
-  agent_lock();
+  agent_lock(agent);
 
   stream = agent_find_stream (agent, stream_id);
   if (stream == NULL)
@@ -5167,7 +5164,7 @@ nice_agent_set_stream_tos (NiceAgent *agent,
 NICEAPI_EXPORT void
 nice_agent_set_software (NiceAgent *agent, const gchar *software)
 {
-  agent_lock();
+  agent_lock(agent);
 
   g_free (agent->software_attribute);
   if (software)
@@ -5187,7 +5184,7 @@ nice_agent_set_stream_name (NiceAgent *agent, guint stream_id,
   GSList *i;
   gboolean ret = FALSE;
 
-  agent_lock();
+  agent_lock(agent);
 
   if (name != NULL) {
     for (i = agent->streams; i; i = i->next) {
@@ -5221,7 +5218,7 @@ nice_agent_get_stream_name (NiceAgent *agent, guint stream_id)
   Stream *stream;
   gchar *name = NULL;
 
-  agent_lock();
+  agent_lock(agent);
 
   stream = agent_find_stream (agent, stream_id);
   if (stream == NULL)
@@ -5287,7 +5284,7 @@ nice_agent_get_default_local_candidate (NiceAgent *agent,
   Component *component = NULL;
   NiceCandidate *default_candidate = NULL;
 
-  agent_lock ();
+  agent_lock (agent);
 
   /* step: check if the component exists*/
   if (!agent_find_component (agent, stream_id, component_id,
@@ -5441,7 +5438,7 @@ nice_agent_generate_local_sdp (NiceAgent *agent)
   GString * sdp = g_string_new (NULL);
   GSList *i;
 
-  agent_lock();
+  agent_lock(agent);
 
   for (i = agent->streams; i; i = i->next) {
     Stream *stream = i->data;
@@ -5462,7 +5459,7 @@ nice_agent_generate_local_stream_sdp (NiceAgent *agent, guint stream_id,
   gchar *ret = NULL;
   Stream *stream;
 
-  agent_lock();
+  agent_lock(agent);
 
   stream = agent_find_stream (agent, stream_id);
   if (stream == NULL)
@@ -5486,7 +5483,7 @@ nice_agent_generate_local_candidate_sdp (NiceAgent *agent,
 
   g_return_val_if_fail(candidate, NULL);
 
-  agent_lock();
+  agent_lock(agent);
 
   sdp = g_string_new (NULL);
   _generate_candidate_sdp (agent, candidate, sdp);
@@ -5505,7 +5502,7 @@ nice_agent_parse_remote_sdp (NiceAgent *agent, const gchar *sdp)
   gint i;
   gint ret = 0;
 
-  agent_lock();
+  agent_lock(agent);
 
   for (l = agent->streams; l; l = l->next) {
     Stream *stream = l->data;
@@ -5599,7 +5596,7 @@ nice_agent_parse_remote_stream_sdp (NiceAgent *agent, guint stream_id,
   GSList *candidates = NULL;
   gint i;
 
-  agent_lock();
+  agent_lock(agent);
 
   stream = agent_find_stream (agent, stream_id);
   if (stream == NULL) {
@@ -5774,7 +5771,7 @@ nice_agent_get_io_stream (NiceAgent *agent, guint stream_id,
 
   g_return_val_if_fail (agent->reliable, NULL);
 
-  agent_lock ();
+  agent_lock (agent);
 
   if (!agent_find_component (agent, stream_id, component_id, NULL, &component))
     goto done;
@@ -5800,7 +5797,7 @@ nice_agent_forget_relays (NiceAgent *agent, guint stream_id, guint component_id)
   g_return_val_if_fail (stream_id >= 1, FALSE);
   g_return_val_if_fail (component_id >= 1, FALSE);
 
-  agent_lock ();
+  agent_lock (agent);
 
   if (!agent_find_component (agent, stream_id, component_id, NULL, &component)) {
     ret = FALSE;
@@ -5857,12 +5854,12 @@ nice_agent_get_component_state (NiceAgent *agent,
   NiceComponentState state = NICE_COMPONENT_STATE_FAILED;
   Component *component;
 
-  agent_lock ();
+  agent_lock (agent);
 
   if (agent_find_component (agent, stream_id, component_id, NULL, &component))
     state = component->state;
 
-  agent_unlock ();
+  agent_unlock (agent);
 
   return state;
 }
