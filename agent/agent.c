@@ -199,22 +199,34 @@ free_queued_signal (QueuedSignal *sig)
   g_slice_free (QueuedSignal, sig);
 }
 
+static gboolean
+agent_emit_pending_signals (NiceAgent *agent)
+{
+  QueuedSignal *sig;
+
+  while ((sig = g_async_queue_try_pop (agent->pending_signals))) {
+    g_signal_emitv (sig->params, sig->signal_id, 0, NULL);
+    free_queued_signal (sig);
+  }
+  return FALSE;
+}
+
 void
 agent_unlock_and_emit (NiceAgent *agent)
 {
-  GQueue queue = G_QUEUE_INIT;
-  QueuedSignal *sig;
-
-  queue = agent->pending_signals;
-  g_queue_init (&agent->pending_signals);
 
   agent_unlock (agent);
-
-  while ((sig = g_queue_pop_head (&queue))) {
-    g_signal_emitv (sig->params, sig->signal_id, 0, NULL);
-
-    free_queued_signal (sig);
-  }
+#if 0
+  /* We need to use this to make sure all the signals are sent from the main
+   * thread. As it's possible to get a signal created by an IO thread in a
+   * multi-threaded environment.
+   */
+  g_main_context_invoke_full (agent->main_context, G_PRIORITY_HIGH,
+      (GSourceFunc) agent_emit_signals_idler, g_object_ref (agent),
+      (GDestroyNotify) g_object_unref);
+#else
+  agent_emit_pending_signals (agent);
+#endif
 }
 
 static void
@@ -250,7 +262,7 @@ agent_queue_signal (NiceAgent *agent, guint signal_id, ...)
     return;
   }
 
-  g_queue_push_tail (&agent->pending_signals, sig);
+  g_async_queue_push (agent->pending_signals, sig);
 }
 
 
@@ -1025,7 +1037,7 @@ nice_agent_init (NiceAgent *agent)
   agent->rng = nice_rng_new ();
   priv_generate_tie_breaker (agent);
 
-  g_queue_init (&agent->pending_signals);
+  agent->pending_signals = g_async_queue_new ();
   g_mutex_init (&agent->mutex);
 }
 
@@ -4596,8 +4608,12 @@ nice_agent_dispose (GObject *object)
   g_slist_free (agent->streams);
   agent->streams = NULL;
 
-  while ((sig = g_queue_pop_head (&agent->pending_signals))) {
-    free_queued_signal (sig);
+  if (agent->pending_signals) {
+    while ((sig = g_async_queue_try_pop (agent->pending_signals))) {
+      free_queued_signal (sig);
+    }
+    g_async_queue_unref (agent->pending_signals);
+    agent->pending_signals = NULL;
   }
 
   g_free (agent->stun_server_ip);

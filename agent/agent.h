@@ -387,7 +387,7 @@ typedef void (*NiceAgentRecvFunc) (
 
 /**
  * nice_agent_new:
- * @ctx: The Glib Mainloop Context to use for timers
+ * @ctx: The Glib Mainloop Context to use for timers and signals
  * @compat: The compatibility mode of the agent
  *
  * Create a new #NiceAgent.
@@ -401,7 +401,7 @@ nice_agent_new (GMainContext *ctx, NiceCompatibility compat);
 
 /**
  * nice_agent_new_reliable:
- * @ctx: The Glib Mainloop Context to use for timers
+ * @ctx: The Glib Mainloop Context to use for timers and signals
  * @compat: The compatibility mode of the agent
  *
  * Create a new #NiceAgent in reliable mode. If the connectivity is established

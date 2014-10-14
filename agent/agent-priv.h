@@ -159,7 +159,7 @@ struct _NiceAgent
   gboolean reliable;               /* property: reliable */
   gboolean keepalive_conncheck;    /* property: keepalive_conncheck */
 
-  GQueue pending_signals;
+  GAsyncQueue *pending_signals;
   guint16 rfc4571_expecting_length;
   gboolean use_ice_udp;
   gboolean use_ice_tcp;
