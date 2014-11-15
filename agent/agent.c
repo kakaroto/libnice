@@ -4688,8 +4688,7 @@ component_io_cb (GSocket *gsocket, GIOCondition condition, gpointer user_data)
     }
 
     component_detach_socket (component, socket_source->socket);
-    agent_unlock (agent);
-    return G_SOURCE_REMOVE;
+    goto out;
   }
 
   has_io_callback = component_has_io_callback (component);
